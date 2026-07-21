@@ -202,67 +202,95 @@ export function App() {
   }
   }, [environments]);
 
+  function generateDronaJobId() {
+    return String(Math.floor(Math.random() * 68719476735));
+  }
+
   function handleRerunCancel() {
     setShowRerunModal(false);
   }
   async function processRerun(promptData) {
-
     setJobStatus("rerun");
     setShowRerunModal(false);
+
     try {
-      const response = await fetch(`${document.dashboard_url}/jobs/composer/history/${pendingRerunRow.job_id}`, {
-        method: 'GET'
+      const originalJobId = pendingRerunRow?.job_id || pendingRerunRow?.drona_id;
+      const rerunJobId = generateDronaJobId();
+      const jobId = originalJobId;
+
+      const response = await fetch(`${document.dashboard_url}/jobs/composer/history/${jobId}`, {
+        method: "GET",
       });
 
       if (!response.ok) {
         throw new Error(`Error: ${response.statusText}`);
       }
 
-      const jobScript = await response.json();
+      const savedJob = await response.json();
+      const additionalFiles = savedJob.additional_files || {};
 
       setShowSplitScreenModal(true);
-
-      setJobScript(jobScript["script"]);
+      setJobScript(savedJob.script || "");
 
       const panes = [
         {
           preview_name: "driver.sh",
-          content: jobScript["driver"],
+          content: savedJob.driver || "",
           name: "driver",
-          order: -2
+          order: -2,
         },
-
       ];
-      if (jobScript["script"] != null) {
+
+      if (savedJob.script != null) {
         panes.push({
           preview_name: "template.txt",
-          content: jobScript["script"],
+          content: savedJob.script,
           name: "run_command",
-          order: -3
+          order: -3,
         });
       }
 
-      for (const [fname, file] of Object.entries(jobScript["additional_files"])) {
+      for (const [fname, file] of Object.entries(additionalFiles)) {
+        const fileIsObject = file && typeof file === "object";
         panes.push({
-          preview_name: file["preview_name"] || fname,
-          content: file["content"] || file,
+          preview_name: fileIsObject ? (file.preview_name || fname) : fname,
+          content: fileIsObject ? (file.content || "") : file,
           name: fname,
-          order: file["preview_order"]
+          order: fileIsObject ? file.preview_order : undefined,
         });
       }
 
       setPanes(panes);
       setMessages([]);
-      setRerunInfo({
-        ...pendingRerunRow,
-        name: promptData.jobName,
-        location: promptData.location
-      });
-      setPendingRerunRow(null);
 
+      const envName =
+        savedJob.runtime ||
+        pendingRerunRow?.runtime ||
+        savedJob.form_data?.env_name ||
+        savedJob.form_data?.runtime?.value ||
+        savedJob.form_data?.runtime?.label ||
+        "";
+
+      setRerunInfo({
+        ...savedJob,
+        original_job_id: originalJobId,
+        job_id: rerunJobId,
+        drona_job_id: rerunJobId,
+        name: promptData.jobName,
+        location: promptData.location,
+        runtime: envName,
+        runtime_label: envName,
+        env_name: envName,
+        env_dir: savedJob.env_dir || pendingRerunRow?.env_dir || savedJob.form_data?.env_dir || "",
+        driver: savedJob.driver || "",
+        script: savedJob.script || "",
+        additional_files: additionalFiles,
+      });
+
+      setPendingRerunRow(null);
     } catch (error) {
-      console.error('Failed to generate preview:', error);
-      alert('Failed to generate preview: ' + error.message);
+      console.error("Failed to generate preview:", error);
+      alert("Failed to generate preview: " + error.message);
     }
   }
 
@@ -272,15 +300,144 @@ export function App() {
     setShowRerunModal(true);
   }
   async function handleForm(row) {
-    const fieldsPromise = new Promise(resolve => {
-      setFieldsLoadedResolver(() => resolve);
-    });
+    try {
+      const jobId = row?.job_id || row?.drona_id;
+      let savedJob = row;
 
-    await setEnvironment({ env: row.runtime, src: row.env_dir });
-    const updatedFields = await fieldsPromise;
+      // Pull the full saved record when possible. The history list can be partial/stale.
+      if (jobId) {
+        const response = await fetch(`${document.dashboard_url}/jobs/composer/history/${jobId}`, {
+          method: "GET",
+        });
 
-    if (composerRef.current) {
-      composerRef.current.setValues(row.form_data);
+        if (response.ok) {
+          savedJob = await response.json();
+        }
+      }
+
+      const savedForm = { ...(savedJob.form_data || {}) };
+
+      const envName =
+        savedJob.runtime ||
+        savedForm.env_name ||
+        savedForm.runtime?.value ||
+        savedForm.runtime?.label ||
+        row?.runtime ||
+        "Generic";
+
+      const envDir =
+        savedJob.env_dir ||
+        savedForm.env_dir ||
+        row?.env_dir ||
+        "";
+
+      const savedName = savedForm.name || savedJob.name || "unnamed";
+      const savedLocation = savedForm.location || savedJob.location || defaultRunLocation;
+
+      const recreateValues = {
+        ...savedForm,
+
+        // Force the Create form to open after clicking Recreate from Manage.
+        mode: "create",
+
+        // Generic uses this composite schema element for job name/location.
+        runDestinationFinal: {
+          name: savedName,
+          location: savedLocation,
+        },
+
+        // Keep the flat values too because backend/history expects them.
+        name: savedName,
+        location: savedLocation,
+
+        runtime: savedForm.runtime || {
+          label: envName,
+          value: envName,
+        },
+        runtime_label: envName,
+        env_name: envName,
+        env_dir: envDir,
+      };
+
+      // If fileUploader was not preserved, rebuild enough for Uploader to recreate from paths.
+      if (
+        (!recreateValues.fileUploader || recreateValues.fileUploader.length === 0) &&
+        Array.isArray(savedJob.uploaded_files)
+      ) {
+        recreateValues.fileUploader = savedJob.uploaded_files.map((filename) => ({
+          filename,
+          filepath: `${savedLocation}/${filename}`,
+        }));
+      }
+
+      // Recreate should behave like a normal new/create workflow,
+      // but it should also restore the saved preview panes so the Job Script appears.
+      setJobStatus("new");
+
+      const additionalFiles = savedJob.additional_files || {};
+      const recreatedPanes = [
+        {
+          preview_name: "driver.sh",
+          content: savedJob.driver || savedForm.driver || "",
+          name: "driver",
+          order: -2,
+        },
+      ];
+
+      if (savedJob.script || savedForm.run_command) {
+        recreatedPanes.push({
+          preview_name: "template.txt",
+          content: savedJob.script || savedForm.run_command,
+          name: "run_command",
+          order: -3,
+        });
+      }
+
+      for (const [fname, file] of Object.entries(additionalFiles)) {
+        const fileIsObject = file && typeof file === "object";
+        recreatedPanes.push({
+          preview_name: fileIsObject ? (file.preview_name || fname) : fname,
+          content: fileIsObject ? (file.content || "") : file,
+          name: fname,
+          order: fileIsObject ? file.preview_order : undefined,
+        });
+      }
+
+      setPanes(recreatedPanes);
+      setMessages([]);
+
+      // Recreate should restore the form/env view only.
+      // User can click Preview to open the script pane.
+      setShowSplitScreenModal(false);
+
+      setRunLocation(savedLocation);
+      setBaseRunLocation(savedLocation);
+      setLocationPickedByUser(true);
+
+      const sameEnvironment =
+        environment.env === envName &&
+        environment.src === envDir;
+
+      if (!sameEnvironment) {
+        const fieldsPromise = new Promise((resolve) => {
+          setFieldsLoadedResolver(() => resolve);
+        });
+
+        setEnvironment({ env: envName, src: envDir });
+
+        // Wait for schema reload after changing environments.
+        await fieldsPromise;
+      }
+
+      // Let Composer render/update first, then push values.
+      setTimeout(() => {
+        if (composerRef.current) {
+          composerRef.current.setValues(recreateValues);
+        }
+      }, 0);
+    } catch (error) {
+      console.error("Failed to recreate workflow:", error);
+      alert("Failed to recreate workflow: " + error.message);
     }
   }
 

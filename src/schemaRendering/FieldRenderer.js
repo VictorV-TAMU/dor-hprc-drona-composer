@@ -41,10 +41,18 @@ const FieldRenderer = ({
     }
 
     if (Element) {
-      // Normalize defaultLocation for picker-like components
+      // Normalize defaultLocation for picker-like components.
+      // Important for Recreate: restored picker values, such as Generic's
+      // importscript field, need to be passed back into Picker as its path.
       let extraProps = {};
+      let elementKey = name;
     
       if (type === "picker") {
+        const restoredValue =
+          typeof value === "string"
+            ? value
+            : value?.value || value?.path || value?.filepath || "";
+    
         const schemaDefault =
           attributes.defaultLocation !== undefined
             ? attributes.defaultLocation
@@ -56,14 +64,19 @@ const FieldRenderer = ({
             : "";
     
         extraProps.defaultLocation =
-          (typeof schemaDefault === "string" ? schemaDefault : null) ??
+          restoredValue ||
+          (typeof schemaDefault === "string" ? schemaDefault : "") ||
           fallbackFromLocation;
+
+        // Some Picker instances initialize internal display state from
+        // defaultLocation only on mount, so remount when the restored path changes.
+        elementKey = `${name}-${extraProps.defaultLocation || ""}`;
       }
     
       return (
         <div key={name} className={fieldStyles}>
           <Element
-            key={name}
+            key={elementKey}
             name={name}
             labelOnTop={labelOnTop}
             value={value}

@@ -3,7 +3,6 @@ import { Text, Select, Picker } from "./schemaRendering/schemaElements/index";
 import Composer from "./schemaRendering/Composer";
 import MultiPaneTextArea from "./MultiPaneTextArea";
 import ErrorAlert from "./ErrorAlert";
-import SubmissionHistory from "./SubmissionHistory";
 import EnvironmentModal from "./EnvironmentModal";
 import SplitScreenModal from "./SplitScreenModal";
 import ConfirmationModal from "./ConfirmationModal";
@@ -31,7 +30,6 @@ function JobComposer({
   setPendingNewPreview,
   ...props
 }) {
-  const [showHistory, setShowHistory] = useState(true);
   const [isSplitScreenMinimized, setIsSplitScreenMinimized] = useState(false);
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
   const [showRequiredFieldsModal, setShowRequiredFieldsModal] = useState(false);
@@ -65,44 +63,67 @@ function JobComposer({
     if (!paneRefs) return null;
 
     if (props.jobStatus === "rerun") {
-      const data = props.rerunInfo;
+      const data = { ...(props.rerunInfo || {}) };
+      const paneRefs = multiPaneRef.current?.getPaneRefs();
       const additionalFiles = {};
 
-      paneRefs.forEach((ref) => {
-        if (!ref.current) return;
+      if (paneRefs) {
+        paneRefs.forEach((ref) => {
+          if (!ref.current) return;
 
-        const current = ref.current;
-        const name = current.getAttribute("name");
+          const current = ref.current;
+          const name = current.getAttribute("name");
 
-        if (name === "driver" || name === "run_command") {
-          data[name] = current.value;
-        } else {
-          additionalFiles[name] = current.value;
-        }
-      });
-
-      data["additional_files"] = JSON.stringify(additionalFiles);
-
-      if (props.globalFiles) {
-        data["files"] = props.globalFiles;
+          if (name === "driver") {
+            data.driver = current.value;
+          } else if (name === "run_command") {
+            data.run_command = current.value;
+            data.script = current.value;
+          } else if (name) {
+            additionalFiles[name] = current.value;
+          }
+        });
       }
 
-      // Ensure drona_job_id is present for reruns (use existing job_id from history)
-      if (data["job_id"]) {
-        data["drona_job_id"] = data["job_id"];
-      }
+      const envName =
+        data.env_name ||
+        data.runtime ||
+        data.runtime_label ||
+        data.form_data?.env_name ||
+        data.form_data?.runtime?.value ||
+        data.form_data?.runtime?.label ||
+        "";
 
-      const formData = new FormData;
-      for (const [key, value] of Object.entries(data)) {
-        if (value instanceof File) {
-          formData.append(key, value);
-        } else if (Array.isArray(value)) {
-          value.forEach((item, index) => {
-            formData.append(`${key}[]`, item);
-          });
-        } else if (value !== null && value !== undefined) {
+      const envDir =
+        data.env_dir ||
+        data.form_data?.env_dir ||
+        "";
+
+      const formData = new FormData();
+
+      const appendIfPresent = (key, value) => {
+        if (value !== null && value !== undefined && value !== "") {
           formData.append(key, String(value));
         }
+      };
+
+      appendIfPresent("name", data.name);
+      appendIfPresent("location", data.location);
+      appendIfPresent("runtime", envName);
+      appendIfPresent("runtime_label", envName);
+      appendIfPresent("env_name", envName);
+      appendIfPresent("env_dir", envDir);
+      appendIfPresent("job_id", data.job_id);
+      appendIfPresent("drona_job_id", data.drona_job_id || data.job_id);
+      appendIfPresent("driver", data.driver);
+      appendIfPresent("run_command", data.run_command || data.script);
+
+      formData.append("additional_files", JSON.stringify(additionalFiles));
+
+      if (props.globalFiles) {
+        props.globalFiles.forEach((file) => {
+          formData.append("files[]", file);
+        });
       }
 
       return formData;
@@ -352,6 +373,8 @@ function JobComposer({
                                   customRunLocation={props.customRunLocation}
                                   setLocationPickedByUser={props.setLocationPickedByUser}
                                   locationPickedByUser={props.locationPickedByUser}
+                                  handleRerun={props.handleRerun}
+                                  handleForm={props.handleForm}
                                 />
                                 <div className="composer-actions" >
                                   <div className="invisible">
@@ -368,14 +391,6 @@ function JobComposer({
                                       />
                                     </div>
                                   )}
-                                  <div>
-                                    <button className="btn btn-primary maroon-button" onClick={(e) => {
-                                      e.preventDefault();
-                                      setShowHistory(!showHistory);
-                                    }}>
-                                      {showHistory ? 'Hide History' : 'Show History'}
-                                    </button>
-                                  </div>
                                 </div>
                               </>
                             )}
@@ -385,8 +400,8 @@ function JobComposer({
                   </div>
                 </div>
 
-              </form>          <div style={{ width: '100%', maxWidth: '100%', overflowX: 'auto' }}>
-                <SubmissionHistory isExpanded={showHistory} handleRerun={props.handleRerun} handleForm={props.handleForm} />
+              </form>
+              <div style={{ width: '100%', maxWidth: '100%', overflowX: 'auto' }}>
                 <Footer/>
               </div>
             </>

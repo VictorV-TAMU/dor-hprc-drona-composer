@@ -1,0 +1,57 @@
+{
+  "configure": {
+    "type": "hidden",
+    "label": "configured",
+    "name": "configured",
+    "isDynamic": true,
+    "retriever": "drona_info_configure.sh"
+  },
+  "ManageCreateContainer": {
+    "type": "rowContainer",
+    "condition": "",
+    "elements": {
+      "mode": {
+        "type": "radioGroup",
+        "style": "button",
+        "label": "Mode",
+        "name": "mode",
+        "condition": "",
+        "options": [
+          {
+            "label": "Create",
+            "value": "create"
+          },
+          {
+            "label": "Manage",
+            "value": "manage"
+          }
+        ],
+        "value": {
+          "label": "Create",
+          "value": "create"
+        }
+      }
+    }
+  },
+  "ConfigureContainer": {
+    "type": "container",
+    "elements": {
+      "$ref": "schemas/configure.schema.json"
+    },
+    "condition": "mode.__never_show_configure__"
+  },
+  "CreateContainer": {
+    "type": "container",
+    "elements": {
+      "$ref": "schemas/create.schema.json"
+    },
+    "condition": "mode.create"
+  },
+  "ManageContainer": {
+    "type": "container",
+    "elements": {
+      "$ref": "schemas/manage.schema.json"
+    },
+    "condition": "mode.manage"
+  }
+}

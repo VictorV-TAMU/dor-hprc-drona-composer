@@ -234,6 +234,8 @@ const Composer = forwardRef((props, ref) => {
           setLocationPickedByUser: props.setLocationPickedByUser,
           environment: props.environment,
           setFieldValue: handleValueChange,
+          handleRerun: props.handleRerun,
+          handleForm: props.handleForm,
         }}
       />
     </FormValuesContext.Provider>
