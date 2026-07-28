@@ -22,8 +22,9 @@ def get_job_data(script_path, flag, env):
         # Run the command
         result = subprocess.run(
             command, 
-            capture_output=True, 
-            text=True, 
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True,
             check=True
         )
         
