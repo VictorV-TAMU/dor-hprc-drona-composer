@@ -55,7 +55,9 @@ export async function executeScript({
     }
 
     const queryString = params.toString();
-    const curUrl = document.dashboard_url || window.APP_ROOT || config.production.dashboard_url;
+    const devUrl = config.development.dashboard_url;
+    const prodUrl = config.production.dashboard_url;
+    const curUrl = process.env.NODE_ENV === "development" ? devUrl : prodUrl;
     
     const requestUrl = `${curUrl}/jobs/composer/evaluate_script?retriever_path=${encodeURIComponent(
         retrieverPath
@@ -106,7 +108,9 @@ export async function fetchFileContent({ filePath, environment }) {
         params.append('DRONA_ENV_DIR', envPath);
     }
 
-    const curUrl = document.dashboard_url || window.APP_ROOT || config.production.dashboard_url;
+    const devUrl = config.development.dashboard_url;
+    const prodUrl = config.production.dashboard_url;
+    const curUrl = process.env.NODE_ENV === "development" ? devUrl : prodUrl;
 
     const requestUrl = `${curUrl}/jobs/composer/read_file?${params.toString()}`;
     const response = await fetch(requestUrl);
