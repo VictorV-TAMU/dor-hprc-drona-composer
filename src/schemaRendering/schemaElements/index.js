@@ -80,7 +80,8 @@ export const componentsMap = {
 	dynamicCheckboxGroup: DynamicCheckboxGroup,
 	dynamicViewer: DynamicViewer,
 	container: Container,
-	workflowRecreateRerun: WorkflowRecreateRerun,
+	workflowActions: WorkflowActions,
+	workflowRecreateRerun: WorkflowActions,
 	hidden: Hidden
 
 };
