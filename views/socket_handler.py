@@ -42,18 +42,18 @@ import subprocess
 from datetime import datetime
 
 # Job configuration
-JOB_ID = "{drona_job_id}"
-JOBS_DIR = "{jobs_dir}"
+JOB_ID = {drona_job_id!r}
+JOBS_DIR = {jobs_dir!r}
 STATUS_FILE = os.path.join(JOBS_DIR, f"{{JOB_ID}}.json")
 OUTPUT_FILE = os.path.join(JOBS_DIR, f"{{JOB_ID}}.out")
-BASH_CMD = """{bash_cmd}"""
+BASH_CMD = {bash_cmd!r}
 
 def update_status(status, exit_code=None):
     """Update job status file"""
     status_data = {{
         "job_id": JOB_ID,
         "status": status,
-        "created_at": "{datetime.now().isoformat()}",
+            "created_at": {datetime.now().isoformat()!r},
         "updated_at": datetime.now().isoformat()
     }}
     if exit_code is not None:
@@ -88,11 +88,11 @@ def run_command_with_pty():
             'PYTHONUNBUFFERED': '1'
         }})
         
-        {f"env['DRONA_WF_ID'] = '{drona_job_id}'" if drona_job_id else ""}
-        {f"env['DRONA_WF_DIR'] = '{job_location}'" if job_location else ""}
-        {f"env['DRONA_RUNTIME_DIR'] = '{runtime_dir}'" if runtime_dir else ""}
-        {f"env['DRONA_ENV_DIR'] = '{env_dir}'" if env_dir else ""}
-        {f"env['DRONA_ENV_NAME'] = '{env_name}'" if env_name else ""}
+        {f"env['DRONA_WF_ID'] = {drona_job_id!r}" if drona_job_id else ""}
+        {f"env['DRONA_WF_DIR'] = {job_location!r}" if job_location else ""}
+        {f"env['DRONA_RUNTIME_DIR'] = {runtime_dir!r}" if runtime_dir else ""}
+        {f"env['DRONA_ENV_DIR'] = {env_dir!r}" if env_dir else ""}
+        {f"env['DRONA_ENV_NAME'] = {env_name!r}" if env_name else ""}
 
 
         
