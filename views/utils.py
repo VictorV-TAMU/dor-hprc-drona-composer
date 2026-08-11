@@ -19,24 +19,38 @@ def create_folder_if_not_exist(dir_path):
         
 def _read_config_json():
     if not CONFIG_FILE.exists():
-        return {"ok": False, "reason": f"Config file not found: {CONFIG_FILE}"}
+        return {
+            "ok": False,
+            "error": "not_found",
+            "reason": f"Config file not found: {CONFIG_FILE}",
+        }
     try:
         cfg = json.loads(CONFIG_FILE.read_text())
         if not isinstance(cfg, dict):
-            return {"ok": False, "reason": "Config file must be a JSON object."}
+            return {"ok": False, "error": "invalid", "reason": "Config file must be a JSON object."}
 
-        dd = cfg.get("drona_dir", "")
-        if not isinstance(dd, str) or not dd.strip():
-            return {"ok": False, "reason": "Config missing 'drona_dir' key."}
+        dd = cfg.get("drona_dir")
+        if dd is None or (isinstance(dd, str) and not dd.strip()):
+            return {
+                "ok": False,
+                "error": "selection_required",
+                "reason": "Config is missing a usable 'drona_dir'. Please choose a new location.",
+            }
+        if not isinstance(dd, str):
+            return {"ok": False, "error": "invalid", "reason": "Config 'drona_dir' must be a string."}
 
         # Keep the raw path for comparison (so we can distinguish drona_wfe vs drona_composer)
         raw_path = Path(dd).expanduser()
 
         resolved = raw_path.resolve()
         if not raw_path.exists():
-            return {"ok": False, "reason": f"drona_dir does not exist: {raw_path}"}
+            return {
+                "ok": False,
+                "error": "selection_required",
+                "reason": f"Configured Drona directory no longer exists: {raw_path}. Please choose a new location.",
+            }
         if not resolved.is_dir():
-            return {"ok": False, "reason": f"drona_dir is not a directory: {resolved}"}
+            return {"ok": False, "error": "invalid", "reason": f"drona_dir is not a directory: {resolved}"}
             
         # IMPORTANT: return the raw path, not the resolved one
         return {
@@ -46,9 +60,9 @@ def _read_config_json():
             "drona_dir_resolved": str(resolved),  # e.g. "/scratch/.../drona_composer"
         }
     except json.JSONDecodeError:
-        return {"ok": False, "reason": "Config file is invalid JSON."}
+        return {"ok": False, "error": "invalid", "reason": "Config file is invalid JSON."}
     except Exception as e:
-        return {"ok": False, "reason": f"Failed to read config: {e}"}
+        return {"ok": False, "error": "unreadable", "reason": f"Failed to read config: {e}"}
 
         
 def _write_config_json_atomically(drona_dir_abs: str):
@@ -63,6 +77,28 @@ def _safe_rename(src: Path, dst: Path):
         os.replace(src, dst)  # atomic if same fs
     except OSError:
         shutil.move(str(src), str(dst))
+
+
+def _ensure_legacy_symlink(legacy_dir: Path, target: Path):
+    """Create the legacy alias, or verify an existing alias is exactly correct."""
+    try:
+        target.symlink_to(legacy_dir, target_is_directory=True)
+    except FileExistsError:
+        if not target.is_symlink():
+            raise RuntimeError(
+                f"Cannot migrate because '{target}' already exists and is not a symlink."
+            )
+
+        if not target.exists():
+            raise RuntimeError(
+                f"Cannot migrate because '{target}' is a broken symlink."
+            )
+
+        if target.resolve() != legacy_dir.resolve():
+            raise RuntimeError(
+                f"Cannot migrate because '{target}' points to '{target.resolve()}', "
+                f"not '{legacy_dir.resolve()}'."
+            )
         
 def probe_and_autofix_config():
     """
@@ -89,13 +125,26 @@ def probe_and_autofix_config():
             "action": "ok",
         }
 
+    if r.get("error") == "selection_required":
+        return {
+            "ok": False,
+            "reason": r.get("reason", "Please choose a Drona directory."),
+            "action": "select_needed",
+        }
+
+    # An existing config belongs to the user. Never replace it merely because it
+    # is malformed, unreadable, or temporarily points at unavailable storage.
+    if r.get("error") != "not_found":
+        return {
+            "ok": False,
+            "reason": r.get("reason", "Config is invalid."),
+            "action": "error",
+        }
+
     # 2) No valid config: if legacy dir exists, migrate
     if dc.is_dir():
         try:
-            try:
-                os.symlink(dc, target)
-            except FileExistsError:
-                pass  # already exists (could be symlink or real dir)
+            _ensure_legacy_symlink(dc, target)
 
             _write_config_json_atomically(str(target))
             return {
@@ -197,6 +246,12 @@ def get_drona_dir():
     if not cfg.get("ok"):
         return {"ok": False, "reason": cfg.get("reason", "Unknown error")}
     return {"ok": True, "drona_dir": cfg["drona_dir"]}
+
+
+def get_current_drona_dir():
+    """Return the current configured directory, or None when unavailable."""
+    drona = get_drona_dir()
+    return drona.get("drona_dir") if drona.get("ok") else None
 
 def get_envs_dir():
     g = get_drona_dir()
