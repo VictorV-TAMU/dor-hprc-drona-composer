@@ -34,7 +34,7 @@ function JobComposer({
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
   const [showRequiredFieldsModal, setShowRequiredFieldsModal] = useState(false);
   const [missingRequiredFields, setMissingRequiredFields] = useState([]);
-  const [configBlocked, setConfigBlocked] = useState(false);
+  const [configBlocked, setConfigBlocked] = useState(true);
   const [hasSubmittedCurrentPreview, setHasSubmittedCurrentPreview] = useState(false);
   const [showEnvironmentFilmstrip, setShowEnvironmentFilmstrip] = useState(true);
 

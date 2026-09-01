@@ -1,6 +1,7 @@
 from flask import Response, stream_with_context, Blueprint, send_file, render_template, request, jsonify
 import os
 import re
+import shlex
 import subprocess
 import threading
 import uuid
@@ -12,6 +13,11 @@ from .file_utils import save_file
 
 logger = Logger()
 socketio = None  # Will be initialized when passed from main app
+
+
+def build_driver_command(driver_script_path):
+    """Build a shell command without allowing the script path to be split."""
+    return f"bash {shlex.quote(driver_script_path)}"
 
 def extract_job_id(submit_response):
     """Extract job ID from the sbatch submission response"""
@@ -65,7 +71,7 @@ def submit_job_route():
     bash_script_path = engine.generate_script(params)
     driver_script_path = engine.generate_driver_script(params)
 
-    bash_cmd = f"bash {driver_script_path}"
+    bash_cmd = build_driver_command(driver_script_path)
 
     history_manager = JobHistoryManager()
     job_record = history_manager.save_job(

@@ -1,5 +1,6 @@
 import json
 import re
+import shlex
 import argparse
 import ast
 import shutil
@@ -287,6 +288,13 @@ class Engine():
         
             # Remove variable tags
             value = re.sub(r'<var>(.*?)\n*</var>', r'\1', value, flags=re.DOTALL)
+
+            # flocation is substituted into shell templates (normally `cd
+            # [flocation]`). Quote it once in the engine so imported workflows
+            # remain safe when a configured or job directory contains spaces or
+            # shell metacharacters.
+            if key == "flocation":
+                value = shlex.quote(value)
         
         
             map[key] = value
@@ -628,4 +636,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

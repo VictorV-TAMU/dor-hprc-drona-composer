@@ -2,7 +2,7 @@ from flask import Flask, render_template, redirect, jsonify, current_app
 from flask_cors import CORS
 from views.job_composer import job_composer
 from views import socket_handler
-from views.utils import get_drona_dir, get_drona_root
+from views.utils import get_current_drona_dir, get_drona_root
 import yaml
 import os
 
@@ -30,11 +30,11 @@ app.config.update(config)
 app.config['user'] = os.environ['USER']
 app.config['drona_root'] = get_drona_root()
 
-dd = get_drona_dir()    
-if dd["ok"]:
-    app.config['drona_dir'] = dd["drona_dir"]
-else:
-    app.config["drona_dir"] = None
+
+@app.context_processor
+def inject_user_config():
+    """Read user-scoped configuration for every rendered page request."""
+    return {"current_drona_dir": get_current_drona_dir()}
 
 app.register_blueprint(job_composer, url_prefix="/jobs/composer")
 
